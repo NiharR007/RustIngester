@@ -36,15 +36,42 @@ pub async fn get_client() -> Result<Client> {
         )
         .await?;
     
-    // Create embeddings table if it doesn't exist (without vector extension for now)
+    // Create embeddings table if it doesn't exist (explicitly in ag_catalog schema)
     client
         .batch_execute(
-            "CREATE TABLE IF NOT EXISTS embeddings (
+            "CREATE TABLE IF NOT EXISTS ag_catalog.embeddings (
                  triplet_id BIGINT PRIMARY KEY,
                  vec TEXT,
-                 lsh_bucket INTEGER
+                 lsh_bucket INTEGER,
+                 session_id TEXT,
+                 edge_text TEXT
              );"
         )
         .await?;
+    
+    // Create sessions metadata table (explicitly in ag_catalog schema)
+    client
+        .batch_execute(
+            "CREATE TABLE IF NOT EXISTS ag_catalog.sessions (
+                 session_id TEXT PRIMARY KEY,
+                 ingested_at TIMESTAMP DEFAULT NOW(),
+                 node_count INTEGER,
+                 edge_count INTEGER
+             );"
+        )
+        .await?;
+    
+    // Create edge evidence tracking table (explicitly in ag_catalog schema)
+    client
+        .batch_execute(
+            "CREATE TABLE IF NOT EXISTS ag_catalog.edge_evidence (
+                 edge_id BIGINT,
+                 session_id TEXT,
+                 evidence_message_id TEXT,
+                 PRIMARY KEY (edge_id, evidence_message_id)
+             );"
+        )
+        .await?;
+    
     Ok(client)
 }

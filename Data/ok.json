@@ -1,0 +1,906 @@
+{
+  "688e7460-8e78-800d-bccb-7d9d5380dc33": {
+    "nodes": [
+      {
+        "id": "User",
+        "type": "Person"
+      },
+      {
+        "id": "editdistance",
+        "type": "PythonPackage"
+      },
+      {
+        "id": "pip_install_editdistance",
+        "type": "Command"
+      },
+      {
+        "id": "Levenshtein_distance",
+        "type": "Concept"
+      }
+    ],
+    "edges": [
+      {
+        "source": "User",
+        "relation": "requested_installation_of",
+        "target": "editdistance",
+        "evidence_message_ids": [
+          "41389ec1-cc3e-44d5-8008-bfa94abd9954"
+        ]
+      },
+      {
+        "source": "User",
+        "relation": "intends_to_execute",
+        "target": "pip_install_editdistance",
+        "evidence_message_ids": [
+          "41389ec1-cc3e-44d5-8008-bfa94abd9954"
+        ]
+      },
+      {
+        "source": "pip_install_editdistance",
+        "relation": "installs",
+        "target": "editdistance",
+        "evidence_message_ids": [
+          "26c45e21-3286-4dcf-85e6-4b378f63aba5"
+        ]
+      },
+      {
+        "source": "editdistance",
+        "relation": "computes",
+        "target": "Levenshtein_distance",
+        "evidence_message_ids": [
+          "26c45e21-3286-4dcf-85e6-4b378f63aba5"
+        ]
+      }
+    ]
+  },
+  "687eb3da-6d40-800d-a9f2-7fd49fdeba6c": {
+    "nodes": [
+      {
+        "id": "User",
+        "type": "Person"
+      },
+      {
+        "id": "SpamFilter",
+        "type": "System"
+      },
+      {
+        "id": "SpamAssassinCorpus",
+        "type": "Dataset"
+      },
+      {
+        "id": "Ham",
+        "type": "ClassLabel"
+      },
+      {
+        "id": "Spam",
+        "type": "ClassLabel"
+      },
+      {
+        "id": "Feature",
+        "type": "Concept"
+      },
+      {
+        "id": "EmailParser",
+        "type": "Process"
+      },
+      {
+        "id": "BeautifulSoup",
+        "type": "Library"
+      },
+      {
+        "id": "TextPreprocessing",
+        "type": "Process"
+      },
+      {
+        "id": "NLTK",
+        "type": "Library"
+      },
+      {
+        "id": "TFIDFVectorizer",
+        "type": "Method"
+      }
+    ],
+    "edges": [
+      {
+        "source": "User",
+        "relation": "wants_to_train",
+        "target": "SpamFilter",
+        "evidence_message_ids": [
+          "96a9407d-682e-4f17-91cd-1f49cc9936fe"
+        ]
+      },
+      {
+        "source": "SpamFilter",
+        "relation": "uses_dataset",
+        "target": "SpamAssassinCorpus",
+        "evidence_message_ids": [
+          "96a9407d-682e-4f17-91cd-1f49cc9936fe",
+          "0230e698-05c1-462b-931f-2e600cfdcda0"
+        ]
+      },
+      {
+        "source": "SpamFilter",
+        "relation": "classifies_as",
+        "target": "Ham",
+        "evidence_message_ids": [
+          "96a9407d-682e-4f17-91cd-1f49cc9936fe"
+        ]
+      },
+      {
+        "source": "SpamFilter",
+        "relation": "classifies_as",
+        "target": "Spam",
+        "evidence_message_ids": [
+          "96a9407d-682e-4f17-91cd-1f49cc9936fe"
+        ]
+      },
+      {
+        "source": "SpamFilter",
+        "relation": "relies_on",
+        "target": "Feature",
+        "evidence_message_ids": [
+          "96a9407d-682e-4f17-91cd-1f49cc9936fe"
+        ]
+      },
+      {
+        "source": "EmailParser",
+        "relation": "extracts_fields",
+        "target": "Feature",
+        "evidence_message_ids": [
+          "895d9c24-49d2-4ddc-97fe-7ad405befe88"
+        ]
+      },
+      {
+        "source": "EmailParser",
+        "relation": "removes_html_with",
+        "target": "BeautifulSoup",
+        "evidence_message_ids": [
+          "895d9c24-49d2-4ddc-97fe-7ad405befe88"
+        ]
+      },
+      {
+        "source": "TextPreprocessing",
+        "relation": "uses_library",
+        "target": "NLTK",
+        "evidence_message_ids": [
+          "0f60081a-3efa-40b1-bf59-e5152615a259"
+        ]
+      },
+      {
+        "source": "TextPreprocessing",
+        "relation": "applies",
+        "target": "TFIDFVectorizer",
+        "evidence_message_ids": [
+          "d2f19051-dd94-4922-8509-eea601763587",
+          "0f60081a-3efa-40b1-bf59-e5152615a259"
+        ]
+      }
+    ]
+  },
+  "68796979-3970-800d-89e3-5175f7ab6183": {
+    "nodes": [
+      {
+        "id": "User",
+        "type": "Person"
+      },
+      {
+        "id": "AdvisorKathleenVanderLan",
+        "type": "Person"
+      },
+      {
+        "id": "CoopEnrollmentIssue",
+        "type": "Problem"
+      },
+      {
+        "id": "Course_5945_CRN_20099",
+        "type": "Course"
+      },
+      {
+        "id": "CrewOutputObject",
+        "type": "Object"
+      },
+      {
+        "id": "MissingResultAttributeError",
+        "type": "Error"
+      },
+      {
+        "id": "AttributeInspectionSolution",
+        "type": "Solution"
+      }
+    ],
+    "edges": [
+      {
+        "source": "User",
+        "relation": "requests_assistance_with",
+        "target": "CoopEnrollmentIssue",
+        "evidence_message_ids": [
+          "38faab80-7f1b-4c2a-b421-f097a141d5c8"
+        ]
+      },
+      {
+        "source": "CoopEnrollmentIssue",
+        "relation": "related_to",
+        "target": "Course_5945_CRN_20099",
+        "evidence_message_ids": [
+          "aec986c6-decd-47b7-8985-38d9a4014ce3"
+        ]
+      },
+      {
+        "source": "User",
+        "relation": "contacts",
+        "target": "AdvisorKathleenVanderLan",
+        "evidence_message_ids": [
+          "38faab80-7f1b-4c2a-b421-f097a141d5c8",
+          "aec986c6-decd-47b7-8985-38d9a4014ce3"
+        ]
+      },
+      {
+        "source": "User",
+        "relation": "encountered",
+        "target": "MissingResultAttributeError",
+        "evidence_message_ids": [
+          "f35aadff-5b96-4981-bbd8-24c5f17bb703"
+        ]
+      },
+      {
+        "source": "MissingResultAttributeError",
+        "relation": "involves",
+        "target": "CrewOutputObject",
+        "evidence_message_ids": [
+          "f35aadff-5b96-4981-bbd8-24c5f17bb703"
+        ]
+      },
+      {
+        "source": "AttributeInspectionSolution",
+        "relation": "addresses",
+        "target": "MissingResultAttributeError",
+        "evidence_message_ids": [
+          "0ba6cc3d-e5fb-464d-9f67-5c343b34bd72"
+        ]
+      },
+      {
+        "source": "AttributeInspectionSolution",
+        "relation": "suggests_inspecting",
+        "target": "CrewOutputObject",
+        "evidence_message_ids": [
+          "0ba6cc3d-e5fb-464d-9f67-5c343b34bd72"
+        ]
+      }
+    ]
+  },
+  "686e99f3-0944-800d-9150-5557c655b810": {
+    "nodes": [
+      {
+        "id": "User",
+        "type": "Person"
+      },
+      {
+        "id": "MultiAgentConsultantApp",
+        "type": "System"
+      },
+      {
+        "id": "CompanyIntakeAgent",
+        "type": "Agent"
+      },
+      {
+        "id": "WebScraperAgent",
+        "type": "Agent"
+      },
+      {
+        "id": "EDAAgent",
+        "type": "Agent"
+      },
+      {
+        "id": "IndustryDetection",
+        "type": "Task"
+      },
+      {
+        "id": "CompetitorAnalysis",
+        "type": "Task"
+      },
+      {
+        "id": "CSV_EDA",
+        "type": "Task"
+      },
+      {
+        "id": "ProjectStructure",
+        "type": "Artifact"
+      },
+      {
+        "id": "RepoStructureScript",
+        "type": "Script"
+      }
+    ],
+    "edges": [
+      {
+        "source": "User",
+        "relation": "proposes",
+        "target": "MultiAgentConsultantApp",
+        "evidence_message_ids": [
+          "437d643b-60a3-40b2-a74c-784c6b3cae78"
+        ]
+      },
+      {
+        "source": "MultiAgentConsultantApp",
+        "relation": "includes_agent",
+        "target": "CompanyIntakeAgent",
+        "evidence_message_ids": [
+          "96203cca-21e5-494b-aca5-04f6ac573c0b"
+        ]
+      },
+      {
+        "source": "MultiAgentConsultantApp",
+        "relation": "includes_agent",
+        "target": "WebScraperAgent",
+        "evidence_message_ids": [
+          "437d643b-60a3-40b2-a74c-784c6b3cae78",
+          "96203cca-21e5-494b-aca5-04f6ac573c0b"
+        ]
+      },
+      {
+        "source": "MultiAgentConsultantApp",
+        "relation": "includes_agent",
+        "target": "EDAAgent",
+        "evidence_message_ids": [
+          "437d643b-60a3-40b2-a74c-784c6b3cae78",
+          "96203cca-21e5-494b-aca5-04f6ac573c0b"
+        ]
+      },
+      {
+        "source": "CompanyIntakeAgent",
+        "relation": "performs",
+        "target": "IndustryDetection",
+        "evidence_message_ids": [
+          "96203cca-21e5-494b-aca5-04f6ac573c0b"
+        ]
+      },
+      {
+        "source": "WebScraperAgent",
+        "relation": "performs",
+        "target": "CompetitorAnalysis",
+        "evidence_message_ids": [
+          "437d643b-60a3-40b2-a74c-784c6b3cae78",
+          "96203cca-21e5-494b-aca5-04f6ac573c0b"
+        ]
+      },
+      {
+        "source": "EDAAgent",
+        "relation": "performs",
+        "target": "CSV_EDA",
+        "evidence_message_ids": [
+          "437d643b-60a3-40b2-a74c-784c6b3cae78"
+        ]
+      },
+      {
+        "source": "ProjectStructure",
+        "relation": "describes",
+        "target": "MultiAgentConsultantApp",
+        "evidence_message_ids": [
+          "a9065eb6-69cb-42ef-af8f-2bf141f2dee6"
+        ]
+      },
+      {
+        "source": "RepoStructureScript",
+        "relation": "creates",
+        "target": "ProjectStructure",
+        "evidence_message_ids": [
+          "1551c204-c02f-4d93-9631-5f33f84771ec"
+        ]
+      }
+    ]
+  },
+  "687683f2-6914-800d-9757-8740d310ba1d": {
+    "nodes": [
+      {
+        "id": "User",
+        "type": "Person"
+      },
+      {
+        "id": "BusinessFunctionsMapping",
+        "type": "DataStructure"
+      },
+      {
+        "id": "AI_StrategyFunction",
+        "type": "Function"
+      },
+      {
+        "id": "Company",
+        "type": "Organization"
+      },
+      {
+        "id": "FunctionParameters",
+        "type": "Spec"
+      }
+    ],
+    "edges": [
+      {
+        "source": "User",
+        "relation": "defines",
+        "target": "BusinessFunctionsMapping",
+        "evidence_message_ids": [
+          "d8732da1-fb53-4cb4-a42a-b2d02ae07b5f"
+        ]
+      },
+      {
+        "source": "AI_StrategyFunction",
+        "relation": "consumes",
+        "target": "BusinessFunctionsMapping",
+        "evidence_message_ids": [
+          "9d94cdc9-1320-45ab-835b-8e97521a926d"
+        ]
+      },
+      {
+        "source": "AI_StrategyFunction",
+        "relation": "analyzes",
+        "target": "Company",
+        "evidence_message_ids": [
+          "9d94cdc9-1320-45ab-835b-8e97521a926d"
+        ]
+      },
+      {
+        "source": "User",
+        "relation": "asks_about",
+        "target": "FunctionParameters",
+        "evidence_message_ids": [
+          "b352a85a-0854-4f69-a377-4547cd998fa9"
+        ]
+      },
+      {
+        "source": "FunctionParameters",
+        "relation": "specifies_requirements_for",
+        "target": "AI_StrategyFunction",
+        "evidence_message_ids": [
+          "ea34c0cc-146b-43c5-b76d-3f9443c762e6"
+        ]
+      }
+    ]
+  },
+  "68755fa9-7a68-800d-840e-85b704889fd2": {
+    "nodes": [
+      {
+        "id": "User",
+        "type": "Person"
+      },
+      {
+        "id": "MarketingSystemPrompt",
+        "type": "Prompt"
+      },
+      {
+        "id": "BusinessFunctionExtractionFunction",
+        "type": "Function"
+      },
+      {
+        "id": "discover_company_info",
+        "type": "Function"
+      },
+      {
+        "id": "SERP_API",
+        "type": "APIService"
+      },
+      {
+        "id": "CompetitorSearch",
+        "type": "Task"
+      },
+      {
+        "id": "CompanyInfo",
+        "type": "DataObject"
+      }
+    ],
+    "edges": [
+      {
+        "source": "User",
+        "relation": "created",
+        "target": "MarketingSystemPrompt",
+        "evidence_message_ids": [
+          "e8aa3545-be14-4fdc-835a-5c7263d7f16d"
+        ]
+      },
+      {
+        "source": "BusinessFunctionExtractionFunction",
+        "relation": "derived_from",
+        "target": "MarketingSystemPrompt",
+        "evidence_message_ids": [
+          "a87044e4-6cfc-45dc-9040-dac04252af4f",
+          "6cb93c16-5725-422f-8b7a-8c09931836da"
+        ]
+      },
+      {
+        "source": "discover_company_info",
+        "relation": "performs",
+        "target": "CompetitorSearch",
+        "evidence_message_ids": [
+          "9463b307-c86f-4d9c-bd8c-1b2891c64149"
+        ]
+      },
+      {
+        "source": "discover_company_info",
+        "relation": "uses",
+        "target": "SERP_API",
+        "evidence_message_ids": [
+          "9463b307-c86f-4d9c-bd8c-1b2891c64149",
+          "1a8ae39c-9d99-4fc1-a5af-0509a04c15b6"
+        ]
+      },
+      {
+        "source": "BusinessFunctionExtractionFunction",
+        "relation": "outputs",
+        "target": "CompanyInfo",
+        "evidence_message_ids": [
+          "6cb93c16-5725-422f-8b7a-8c09931836da"
+        ]
+      },
+      {
+        "source": "discover_company_info",
+        "relation": "integrates",
+        "target": "BusinessFunctionExtractionFunction",
+        "evidence_message_ids": [
+          "1a8ae39c-9d99-4fc1-a5af-0509a04c15b6"
+        ]
+      }
+    ]
+  },
+  "68753973-aba4-800d-bf3a-f00db4c56ac9": {
+    "nodes": [
+      {
+        "id": "User",
+        "type": "Person"
+      },
+      {
+        "id": "CompanyName",
+        "type": "DataField"
+      },
+      {
+        "id": "CompanyWebsite",
+        "type": "DataField"
+      },
+      {
+        "id": "WebsiteExtractionFunction",
+        "type": "Function"
+      },
+      {
+        "id": "SerpAPI",
+        "type": "APIService"
+      },
+      {
+        "id": "FullContactAPI",
+        "type": "APIService"
+      },
+      {
+        "id": "PythonVenv",
+        "type": "Environment"
+      },
+      {
+        "id": "VenvActivationCommand",
+        "type": "Command"
+      }
+    ],
+    "edges": [
+      {
+        "source": "User",
+        "relation": "wants_to_extract",
+        "target": "CompanyWebsite",
+        "evidence_message_ids": [
+          "5fce9c4f-5f7e-4d32-867e-66f47dfb6317"
+        ]
+      },
+      {
+        "source": "CompanyWebsite",
+        "relation": "derived_from",
+        "target": "CompanyName",
+        "evidence_message_ids": [
+          "5fce9c4f-5f7e-4d32-867e-66f47dfb6317"
+        ]
+      },
+      {
+        "source": "WebsiteExtractionFunction",
+        "relation": "uses",
+        "target": "SerpAPI",
+        "evidence_message_ids": [
+          "be5cae4d-baba-437e-86ec-c224de397ccd",
+          "cb7521e0-8148-4847-88f0-334717f04de3"
+        ]
+      },
+      {
+        "source": "WebsiteExtractionFunction",
+        "relation": "can_use",
+        "target": "FullContactAPI",
+        "evidence_message_ids": [
+          "8c554efb-3183-462b-85c9-9f28f7ac05fb"
+        ]
+      },
+      {
+        "source": "User",
+        "relation": "asks_about",
+        "target": "VenvActivationCommand",
+        "evidence_message_ids": [
+          "87526221-5686-40f4-81b7-812c7410522a"
+        ]
+      },
+      {
+        "source": "VenvActivationCommand",
+        "relation": "activates",
+        "target": "PythonVenv",
+        "evidence_message_ids": [
+          "5db04e13-266a-4f67-b96f-d6c1b2e06c08"
+        ]
+      }
+    ]
+  },
+  "6873f1b6-7f90-800d-b5f2-a7c4f167f568": {
+    "nodes": [
+      {
+        "id": "User",
+        "type": "Person"
+      },
+      {
+        "id": "AI_Legal_Assistant",
+        "type": "System"
+      },
+      {
+        "id": "CrewAI",
+        "type": "Framework"
+      },
+      {
+        "id": "RAG",
+        "type": "Technique"
+      },
+      {
+        "id": "ContractAnalysis",
+        "type": "Task"
+      },
+      {
+        "id": "LegalQuestionAnswering",
+        "type": "Task"
+      },
+      {
+        "id": "WebFallbackSearch",
+        "type": "Task"
+      },
+      {
+        "id": "FewShotPromptExamples",
+        "type": "Prompt"
+      }
+    ],
+    "edges": [
+      {
+        "source": "User",
+        "relation": "proposes",
+        "target": "AI_Legal_Assistant",
+        "evidence_message_ids": [
+          "03973f2d-9732-4f0e-a519-7e18131e4e07"
+        ]
+      },
+      {
+        "source": "AI_Legal_Assistant",
+        "relation": "uses",
+        "target": "CrewAI",
+        "evidence_message_ids": [
+          "03973f2d-9732-4f0e-a519-7e18131e4e07",
+          "6d1a6b56-8d3f-4272-99ef-b09a19de9b02"
+        ]
+      },
+      {
+        "source": "AI_Legal_Assistant",
+        "relation": "uses",
+        "target": "RAG",
+        "evidence_message_ids": [
+          "03973f2d-9732-4f0e-a519-7e18131e4e07",
+          "6d1a6b56-8d3f-4272-99ef-b09a19de9b02"
+        ]
+      },
+      {
+        "source": "AI_Legal_Assistant",
+        "relation": "performs",
+        "target": "ContractAnalysis",
+        "evidence_message_ids": [
+          "03973f2d-9732-4f0e-a519-7e18131e4e07"
+        ]
+      },
+      {
+        "source": "AI_Legal_Assistant",
+        "relation": "performs",
+        "target": "LegalQuestionAnswering",
+        "evidence_message_ids": [
+          "03973f2d-9732-4f0e-a519-7e18131e4e07"
+        ]
+      },
+      {
+        "source": "AI_Legal_Assistant",
+        "relation": "falls_back_to",
+        "target": "WebFallbackSearch",
+        "evidence_message_ids": [
+          "03973f2d-9732-4f0e-a519-7e18131e4e07"
+        ]
+      },
+      {
+        "source": "FewShotPromptExamples",
+        "relation": "guides",
+        "target": "LegalQuestionAnswering",
+        "evidence_message_ids": [
+          "1ff3900e-a58e-4ff9-baa5-e8c3ac4cc2ae"
+        ]
+      }
+    ]
+  },
+  "68715178-8a98-800d-b94c-8e5edaaa11c9": {
+    "nodes": [
+      {
+        "id": "User",
+        "type": "Person"
+      },
+      {
+        "id": "OOFOS",
+        "type": "Company"
+      },
+      {
+        "id": "FootwearIndustry",
+        "type": "Industry"
+      },
+      {
+        "id": "RecoveryFootwear",
+        "type": "Niche"
+      },
+      {
+        "id": "HealthWellness",
+        "type": "Sector"
+      },
+      {
+        "id": "RetailIndustry",
+        "type": "Industry"
+      }
+    ],
+    "edges": [
+      {
+        "source": "User",
+        "relation": "asks_industry_of",
+        "target": "OOFOS",
+        "evidence_message_ids": [
+          "b7966fb4-cb94-43bb-9a5e-01568cfbe642"
+        ]
+      },
+      {
+        "source": "OOFOS",
+        "relation": "operates_in",
+        "target": "FootwearIndustry",
+        "evidence_message_ids": [
+          "8e7cbe7d-0f20-495a-997e-63fb0f557efe"
+        ]
+      },
+      {
+        "source": "OOFOS",
+        "relation": "positions_as",
+        "target": "RecoveryFootwear",
+        "evidence_message_ids": [
+          "8e7cbe7d-0f20-495a-997e-63fb0f557efe"
+        ]
+      },
+      {
+        "source": "OOFOS",
+        "relation": "associated_with",
+        "target": "HealthWellness",
+        "evidence_message_ids": [
+          "8e7cbe7d-0f20-495a-997e-63fb0f557efe"
+        ]
+      },
+      {
+        "source": "OOFOS",
+        "relation": "classified_under",
+        "target": "RetailIndustry",
+        "evidence_message_ids": [
+          "8e7cbe7d-0f20-495a-997e-63fb0f557efe"
+        ]
+      }
+    ]
+  },
+  "6871394b-3434-800d-8095-c9d5c75845f0": {
+    "nodes": [
+      {
+        "id": "User",
+        "type": "Person"
+      },
+      {
+        "id": "CompanyName",
+        "type": "DataField"
+      },
+      {
+        "id": "IndustryLabel",
+        "type": "Attribute"
+      },
+      {
+        "id": "LinkedInCompanyPage",
+        "type": "WebPage"
+      },
+      {
+        "id": "LinkedInScraperFunction",
+        "type": "Function"
+      },
+      {
+        "id": "RequestsLibrary",
+        "type": "Library"
+      },
+      {
+        "id": "BeautifulSoupLibrary",
+        "type": "Library"
+      },
+      {
+        "id": "SerpAPI",
+        "type": "APIService"
+      },
+      {
+        "id": "SoftwareDevelopment",
+        "type": "IndustryValue"
+      }
+    ],
+    "edges": [
+      {
+        "source": "User",
+        "relation": "wants_to_extract",
+        "target": "IndustryLabel",
+        "evidence_message_ids": [
+          "8072a4b2-2661-4428-be0f-3ae7770d7216"
+        ]
+      },
+      {
+        "source": "IndustryLabel",
+        "relation": "from_page",
+        "target": "LinkedInCompanyPage",
+        "evidence_message_ids": [
+          "8072a4b2-2661-4428-be0f-3ae7770d7216",
+          "b2700496-c1b6-4c9a-bf21-89c1928cbed1"
+        ]
+      },
+      {
+        "source": "LinkedInScraperFunction",
+        "relation": "uses",
+        "target": "RequestsLibrary",
+        "evidence_message_ids": [
+          "1e2ed242-02dc-478f-8a91-bba97b486520",
+          "b2700496-c1b6-4c9a-bf21-89c1928cbed1"
+        ]
+      },
+      {
+        "source": "LinkedInScraperFunction",
+        "relation": "uses",
+        "target": "BeautifulSoupLibrary",
+        "evidence_message_ids": [
+          "1e2ed242-02dc-478f-8a91-bba97b486520",
+          "b2700496-c1b6-4c9a-bf21-89c1928cbed1"
+        ]
+      },
+      {
+        "source": "LinkedInScraperFunction",
+        "relation": "retrieves",
+        "target": "IndustryLabel",
+        "evidence_message_ids": [
+          "1e2ed242-02dc-478f-8a91-bba97b486520",
+          "7f3e2e6f-211b-480d-a3a1-3a38fff1c13c"
+        ]
+      },
+      {
+        "source": "LinkedInScraperFunction",
+        "relation": "takes_input",
+        "target": "CompanyName",
+        "evidence_message_ids": [
+          "59303446-f2e8-41dd-b022-8844513a290f",
+          "7663258c-5374-42db-acbf-eb7c32184d76"
+        ]
+      },
+      {
+        "source": "LinkedInScraperFunction",
+        "relation": "uses",
+        "target": "SerpAPI",
+        "evidence_message_ids": [
+          "7663258c-5374-42db-acbf-eb7c32184d76"
+        ]
+      },
+      {
+        "source": "IndustryLabel",
+        "relation": "can_be",
+        "target": "SoftwareDevelopment",
+        "evidence_message_ids": [
+          "7f3e2e6f-211b-480d-a3a1-3a38fff1c13c"
+        ]
+      }
+    ]
+  }
+}

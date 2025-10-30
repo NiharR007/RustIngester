@@ -7,5 +7,7 @@ pub mod etl;
 pub mod ingest;
 pub mod retrieve;
 
+pub mod api;
+
 #[cfg(test)]
 mod tests;
