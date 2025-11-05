@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with pgvector and Apache AGE
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: rustingester-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: rustingester
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rustingester-network
+
+  # llama.cpp embedding server
+  llama-server:
+    image: ghcr.io/ggerganov/llama.cpp:server
+    container_name: rustingester-llama
+    command: 
+      - "-m"
+      - "/models/nomic-embed-text-v1.5.Q4_0.gguf"
+      - "--port"
+      - "8080"
+      - "--embeddings"
+      - "-c"
+      - "2048"
+      - "--host"
+      - "0.0.0.0"
+    volumes:
+      - ./models:/models:ro
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 0"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - rustingester-network
+
+  # RustIngester service
+  rustingester:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rustingester-service
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/rustingester
+      EMBED_SERVER_URL: http://llama-server:8080
+      LSH_BUCKETS: 8
+      SERVER_PORT: 3000
+      RUST_LOG: info
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      llama-server:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - rustingester-network
+
+volumes:
+  postgres_data:
+
+networks:
+  rustingester-network:
+    driver: bridge

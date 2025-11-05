@@ -29,8 +29,13 @@ async fn main() {
     tracing::info!("   GET  /status");
     tracing::info!("   POST /ingest/session");
     tracing::info!("   POST /ingest/batch");
+    tracing::info!("   POST /ingest/messages");
+    tracing::info!("   POST /ingest/knowledge-graph");
+    tracing::info!("   GET  /ingest/statistics");
     tracing::info!("   POST /query/similar");
     tracing::info!("   GET  /query/session/:session_id");
+    tracing::info!("   POST /query/llm-context");
+    tracing::info!("   POST /query/messages");
     tracing::info!("   POST /graph/cypher");
 
     // Create router

@@ -2,3 +2,9 @@
 .env
 /age
 /llama.cpp
+/models
+/PGDB
+/Data
+# Docker
+docker/postgres-data/
+

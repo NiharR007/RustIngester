@@ -1,0 +1,39 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Build artifacts
+target/
+*.pdb
+
+# Data
+Data/
+models/
+llama.cpp/
+
+# Documentation
+*.md
+docs/
+
+# Test files
+tests/
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+
+# Temporary files
+tmp/
+temp/

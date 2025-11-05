@@ -1,99 +1,153 @@
 # RustIngester
 
-A high-performance Rust-based semantic knowledge graph ingestion and retrieval system using PostgreSQL with Apache AGE (A Graph Extension), llama.cpp embeddings, and Locality Sensitive Hashing (LSH) for efficient similarity search.
+A high-performance Rust-based **RAG (Retrieval-Augmented Generation)** system for conversational AI, combining semantic message search with knowledge graph retrieval using PostgreSQL, pgvector, Apache AGE, and llama.cpp embeddings.
 
 ## Overview
 
-RustIngester provides a complete pipeline for:
-- **Ingesting** knowledge graphs with session-based triplets (subject-relationship-object) into a graph database
-- **Embedding** edges as 768-dimensional semantic vectors using llama.cpp with Nomic Embed model
-- **Indexing** using LSH for fast approximate nearest neighbor retrieval
-- **Querying** similar edges using cosine similarity with semantic understanding
-- **HTTP API** for batch ingestion and similarity search
+RustIngester provides a complete RAG pipeline for conversational context retrieval:
+- **Ingesting** conversation messages with 768-dimensional semantic embeddings
+- **Storing** knowledge graphs with conversation-aware nodes and edges
+- **Semantic Search** using pgvector for cosine similarity retrieval
+- **Context Retrieval** for LLM prompts with relevance scoring
+- **HTTP API** for ingestion, querying, and LLM context generation
 
 ## Features
 
 - 🚀 **High Performance**: Built with Rust and async I/O using Tokio
-- 📊 **Graph Database**: Apache AGE for flexible graph storage and Cypher queries
-- 🧠 **Semantic Embeddings**: Real 768-dim vectors via llama.cpp HTTP server with Nomic Embed model
-- 🔍 **Vector Search**: LSH-based similarity search with configurable buckets (default: 8)
-- 🌐 **HTTP API**: RESTful endpoints for batch ingestion and similarity queries
-- 📝 **Evidence Tracking**: Message-level evidence linked to each edge
+- 💬 **Message-Level RAG**: Store and retrieve full conversation messages with embeddings
+- 📊 **Dual Storage**: pgvector for semantic search + Apache AGE for knowledge graphs
+- 🧠 **Semantic Embeddings**: 768-dim vectors via llama.cpp with Nomic Embed v1.5
+- 🔍 **Vector Search**: Native pgvector cosine similarity with IVFFlat indexing
+- 🌐 **Production API**: RESTful endpoints for ingestion and LLM context retrieval
+- 📝 **Evidence Tracking**: Link knowledge graph edges to source messages
 - 🔄 **Async Pipeline**: Non-blocking ingestion and retrieval operations
-- ✅ **Production Ready**: Tested with 100% similarity match accuracy
+- ✅ **Battle Tested**: Successfully ingested 5,741 messages + 270 conversations
+
+## Quick Start
+
+### 🐳 Option 1: Docker (Recommended - 2 minutes)
+
+```bash
+# 1. Clone repository
+git clone <your-repo-url>
+cd RustIngester
+
+# 2. Download model (one-time, ~74MB)
+./download-model.sh
+
+# 3. Start everything
+docker compose up -d
+
+# 4. Test the API
+curl http://localhost:3000/status
+```
+
+**That's it!** See [QUICKSTART_DOCKER.md](QUICKSTART_DOCKER.md) for details.
+
+### 🛠️ Option 2: Manual Setup (30+ minutes)
+
+<details>
+<summary>Click to expand manual installation steps</summary>
+
+```bash
+# 1. Install dependencies (PostgreSQL 14, pgvector, Apache AGE)
+brew install postgresql@14
+brew services start postgresql@14
+
+# 2. Clone and setup
+git clone <your-repo-url>
+cd RustIngester
+
+# 3. Setup database
+psql postgres -c "CREATE EXTENSION IF NOT EXISTS vector;"
+psql postgres -c "CREATE EXTENSION IF NOT EXISTS age;"
+
+# 4. Configure environment
+cat > .env << EOF
+DATABASE_URL=postgresql://$(whoami)@localhost:5432/postgres
+LSH_BUCKETS=8
+SERVER_PORT=3000
+EMBED_SERVER_URL=http://localhost:8080
+EMBED_MODEL_PATH=/path/to/models/nomic-embed-text-v1.5.Q4_0.gguf
+EOF
+
+# 5. Start llama.cpp embedding server (in background)
+cd llama.cpp
+./build/bin/llama-server -m ../models/nomic-embed-text-v1.5.Q4_0.gguf --port 8080 --embeddings &
+cd ..
+
+# 6. Build and run
+cargo build --release
+cargo run --release --bin service
+
+# 7. Test the API
+curl http://localhost:3000/status
+```
+
+See full manual installation guide below.
+</details>
 
 ## Architecture
 
 ```
-┌──────────────────┐
-│  JSON Knowledge  │
-│  Graph Sessions  │
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│   HTTP Service   │
-│  /ingest/batch   │
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐      ┌─────────────────┐
-│  Parse Sessions  │      │  llama.cpp      │
-│  Nodes & Edges   │      │  HTTP Server    │
-└────────┬─────────┘      │  (Port 8080)    │
-         │                └────────┬────────┘
-         ▼                         │
-┌──────────────────┐              │
-│  Create Nodes    │              │
-│  (AGE Cypher)    │              │
-└────────┬─────────┘              │
-         │                         │
-         ▼                         │
-┌──────────────────┐              │
-│  Create Edges    │              │
-│  (AGE Cypher)    │              │
-└────────┬─────────┘              │
-         │                         │
-         ▼                         │
-┌──────────────────┐      ┌───────▼────────┐
-│  Generate Edge   │─────▶│  768-dim       │
-│  Text Embedding  │      │  Embedding     │
-└────────┬─────────┘      └────────────────┘
-         │
-         ▼
-┌──────────────────┐      ┌─────────────────┐
-│  LSH Bucketing   │─────▶│  Store in       │
-│  (8 buckets)     │      │  ag_catalog     │
-└──────────────────┘      └────────┬────────┘
-                                   │
-         ┌─────────────────────────┘
-         │
-         ▼
-┌──────────────────┐
-│  Query Similar   │
-│  /query/similar  │
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│  Cosine          │
-│  Similarity      │
-│  Ranking         │
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│  Return Results  │
-│  with Evidence   │
-└──────────────────┘
+┌──────────────────────┐     ┌──────────────────────┐
+│  Turn Embeddings     │     │  Knowledge Graph     │
+│  (Messages + Embeds) │     │  (Nodes + Edges)     │
+└──────────┬───────────┘     └──────────┬───────────┘
+           │                            │
+           ▼                            ▼
+    ┌───────────────────────────────────────────┐
+    │        HTTP Service (Port 3000)           │
+    │  /ingest/messages    /ingest/knowledge-graph  │
+    └─────────────┬─────────────────────────────┘
+                  │
+                  ▼
+    ┌─────────────────────────────────────────┐
+    │         PostgreSQL Database             │
+    │  ┌─────────────┐    ┌─────────────┐    │
+    │  │  pgvector   │    │ Apache AGE  │    │
+    │  │  Messages   │    │ Knowledge   │    │
+    │  │  Embeddings │    │ Graph       │    │
+    │  └─────────────┘    └─────────────┘    │
+    └─────────────────────────────────────────┘
+                  │
+                  ▼
+    ┌─────────────────────────────────────────┐
+    │         Query / Retrieval               │
+    │                                         │
+    │  /query/llm-context                    │
+    │  ┌──────────────────────────────────┐  │
+    │  │ 1. Generate Query Embedding      │  │
+    │  │    (llama.cpp Port 8080)         │  │
+    │  └──────────────┬───────────────────┘  │
+    │                 │                       │
+    │  ┌──────────────▼───────────────────┐  │
+    │  │ 2. Semantic Search (pgvector)    │  │
+    │  │    Cosine Similarity on          │  │
+    │  │    Message Embeddings            │  │
+    │  └──────────────┬───────────────────┘  │
+    │                 │                       │
+    │  ┌──────────────▼───────────────────┐  │
+    │  │ 3. Optional KG Context           │  │
+    │  │    (Apache AGE Cypher)           │  │
+    │  └──────────────┬───────────────────┘  │
+    │                 │                       │
+    │  ┌──────────────▼───────────────────┐  │
+    │  │ 4. Format for LLM                │  │
+    │  │    - Relevance Scores            │  │
+    │  │    - Token Budget Management     │  │
+    │  │    - Conversation Context        │  │
+    │  └──────────────────────────────────┘  │
+    └─────────────────────────────────────────┘
 ```
 
 ## Prerequisites
 
 - **Rust**: 1.70 or higher
 - **PostgreSQL**: 14.0 or higher
-- **Apache AGE**: 1.5.0 or higher
-- **llama.cpp**: For embedding generation
+- **pgvector**: 0.8.0 or higher (for semantic search)
+- **Apache AGE**: 1.5.0 or higher (for knowledge graphs)
+- **llama.cpp**: For embedding generation (query time)
 - **Nomic Embed Model**: GGUF format (Q4_0 quantized recommended)
 - **Git**: For cloning repositories
 
@@ -115,7 +169,39 @@ sudo systemctl start postgresql
 sudo systemctl enable postgresql
 ```
 
-### 2. Install Apache AGE
+### 2. Install pgvector Extension
+
+pgvector is required for efficient semantic similarity search on embeddings.
+
+#### macOS
+```bash
+# Clone pgvector
+git clone --branch v0.8.0 https://github.com/pgvector/pgvector.git
+cd pgvector
+
+# Build and install
+make PG_CONFIG=/opt/homebrew/opt/postgresql@14/bin/pg_config
+make install PG_CONFIG=/opt/homebrew/opt/postgresql@14/bin/pg_config
+```
+
+#### Linux
+```bash
+# Clone pgvector
+git clone --branch v0.8.0 https://github.com/pgvector/pgvector.git
+cd pgvector
+
+# Build and install
+make
+sudo make install
+```
+
+#### Verify pgvector Installation
+```bash
+psql postgres -c "CREATE EXTENSION IF NOT EXISTS vector;"
+psql postgres -c "SELECT * FROM pg_extension WHERE extname = 'vector';"
+```
+
+### 3. Install Apache AGE
 
 Apache AGE is a PostgreSQL extension that adds graph database capabilities.
 
@@ -156,9 +242,9 @@ SET search_path = ag_catalog, "$user", public;
 SELECT * FROM ag_catalog.ag_graph;
 ```
 
-### 3. Setup Database
+### 4. Setup Database
 
-Create the database and configure AGE:
+Create the database and configure extensions:
 
 ```bash
 # Connect to PostgreSQL
@@ -170,8 +256,10 @@ CREATE DATABASE your_database_name;
 # Connect to your database
 \c your_database_name
 
-# Enable AGE extension
+# Enable extensions
+CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS age;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 LOAD 'age';
 SET search_path = ag_catalog, "$user", public;
 
@@ -179,14 +267,14 @@ SET search_path = ag_catalog, "$user", public;
 \q
 ```
 
-### 4. Clone RustIngester
+### 5. Clone RustIngester
 
 ```bash
 git clone <your-repo-url>
 cd RustIngester
 ```
 
-### 5. Setup llama.cpp Embedding Server
+### 6. Setup llama.cpp Embedding Server
 
 Download and setup the llama.cpp server with Nomic Embed model:
 
@@ -203,33 +291,36 @@ mkdir -p ../models
 cd ../models
 wget https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.Q4_0.gguf
 
-# Start the embedding server
+# Start the embedding server (run in background)
 cd ../llama.cpp
-./server -m ../models/nomic-embed-text-v1.5.Q4_0.gguf --port 8080 --embedding
+./build/bin/llama-server -m ../models/nomic-embed-text-v1.5.Q4_0.gguf --port 8080 --embeddings -ngl 1 -c 2048 &
 ```
 
-**Keep this server running** - the RustIngester service will communicate with it via HTTP.
+**Keep this server running** - it generates embeddings for queries at runtime.
 
-### 6. Configure Environment
+### 7. Configure Environment
 
 Create a `.env` file in the project root:
 
 ```bash
 # .env
-DATABASE_URL=postgresql://postgres:password@localhost:5432/postgres
+DATABASE_URL=postgresql://your_username@localhost:5432/postgres
 LSH_BUCKETS=8
+SERVER_PORT=3000
+EMBED_MODEL_PATH=/path/to/RustIngester/models/nomic-embed-text-v1.5.Q4_0.gguf
 EMBED_SERVER_URL=http://localhost:8080
-EMBED_MODEL_PATH=/path/to/models/nomic-embed-text-v1.5.Q4_0.gguf
 ```
 
 **Configuration Parameters**:
 - `DATABASE_URL`: PostgreSQL connection string
   - Format: `postgresql://[user]:[password]@[host]:[port]/[database]`
-- `LSH_BUCKETS`: Number of LSH buckets for similarity search (default: 8, recommended for most use cases)
-- `EMBED_SERVER_URL`: URL of the llama.cpp embedding server (default: http://localhost:8080)
-- `EMBED_MODEL_PATH`: Path to the GGUF model file (for reference, not used if server is running)
+  - For local Homebrew PostgreSQL without password: `postgresql://your_username@localhost:5432/postgres`
+- `LSH_BUCKETS`: Number of LSH buckets (default: 8, for legacy edge similarity)
+- `SERVER_PORT`: HTTP API port (default: 3000)
+- `EMBED_SERVER_URL`: URL of the llama.cpp embedding server
+- `EMBED_MODEL_PATH`: Path to the GGUF model file
 
-### 7. Build the Project
+### 8. Build the Project
 
 ```bash
 # Install dependencies and build
@@ -238,79 +329,163 @@ cargo build --release
 
 ## Usage
 
-### Starting the HTTP Service
+### Starting the Services
 
-The main entry point is the HTTP API service:
+#### 1. Start llama.cpp Embedding Server (if not already running)
+```bash
+cd llama.cpp
+./build/bin/llama-server -m ../models/nomic-embed-text-v1.5.Q4_0.gguf --port 8080 --embeddings -ngl 1 -c 2048 > /tmp/llama-embed-server.log 2>&1 &
+```
 
+#### 2. Start RustIngester Service
 ```bash
 # Start the service (default port: 3000)
 cargo run --release --bin service
 ```
 
 The service provides the following endpoints:
-- `GET /status` - Health check and system statistics
-- `POST /ingest/batch` - Batch ingest knowledge graph sessions
-- `POST /query/similar` - Semantic similarity search
+- `GET  /status` - Health check and system statistics
+- `POST /ingest/messages` - Ingest conversation messages with embeddings
+- `POST /ingest/knowledge-graph` - Ingest knowledge graph nodes and edges
+- `GET  /ingest/statistics` - Get ingestion statistics
+- `POST /query/llm-context` - Query for LLM context (RAG retrieval)
+- `POST /query/messages` - Get messages by IDs
+- `POST /query/similar` - Legacy edge similarity search
+- `POST /graph/cypher` - Execute custom Cypher queries
 
 ### Ingesting Data
 
-#### Via HTTP API (Recommended)
+#### 1. Ingest Conversation Messages with Embeddings
 
 ```bash
-# Ingest a batch of knowledge graph sessions
-curl -X POST http://localhost:3000/ingest/batch \
+# Ingest messages with pre-computed embeddings
+curl -X POST http://localhost:3000/ingest/messages \
   -H "Content-Type: application/json" \
-  -d @Data/ok_wrapped.json
-```
+  -d @Data/turn_embeddings.json
 
-**Expected Response:**
-```json
+# Expected response
 {
-  "total_sessions": 10,
-  "total_nodes": 75,
-  "total_edges": 66,
-  "total_embeddings": 66,
-  "duration_ms": 1781,
+  "success": true,
+  "total_processed": 5741,
+  "total_inserted": 5741,
+  "duration_ms": 3547,
   "errors": []
 }
 ```
 
-#### Via CLI
-
-```bash
-# Use the CLI tool for file-based ingestion
-cargo run --release --bin ingest_cli Data/ok_wrapped.json
+**Input Format** (`turn_embeddings.json`):
+```json
+[
+  {
+    "message_id": "41389ec1-cc3e-44d5-8008-bfa94abd9954",
+    "conversation_id": "688e7460-8e78-800d-bccb-7d9d5380dc33",
+    "actual_text": "user: pip install editdistance",
+    "embedding": [0.012, 0.002, ..., -0.056]  // 768-dim vector
+  }
+]
 ```
 
-### Querying Similar Edges
+#### 2. Ingest Knowledge Graph
 
 ```bash
-# Search for semantically similar edges
-curl -X POST http://localhost:3000/query/similar \
+# Ingest knowledge graph nodes and edges
+curl -X POST http://localhost:3000/ingest/knowledge-graph \
+  -H "Content-Type: application/json" \
+  -d @Data/enhanced_pipeline_full_results.json
+
+# Expected response
+{
+  "success": true,
+  "total_processed": 3329,
+  "total_inserted": 3329,
+  "duration_ms": 963,
+  "errors": []
+}
+```
+
+**Input Format** (`enhanced_pipeline_full_results.json`):
+```json
+{
+  "conversation-uuid": {
+    "nodes": [
+      {"id": "user", "type": "Person"},
+      {"id": "install_package", "type": "Action"}
+    ],
+    "edges": [
+      {
+        "source": "user",
+        "target": "install_package",
+        "relation": "wants_to",
+        "evidence_message_ids": ["41389ec1-cc3e-44d5-8008-bfa94abd9954"]
+      }
+    ]
+  }
+}
+```
+
+### Querying for LLM Context (RAG Retrieval)
+
+```bash
+# Query for relevant messages based on semantic similarity
+curl -X POST http://localhost:3000/query/llm-context \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "User requested_installation_of editdistance",
-    "top_k": 5
+    "query": "How do I install a Python package?",
+    "top_k": 5,
+    "max_tokens": 2000,
+    "include_kg_edges": true
   }' | jq
 ```
 
 **Example Response:**
 ```json
 {
-  "results": [
-    {
-      "session_id": "688e7460-8e78-800d-bccb-7d9d5380dc33",
-      "edge": {
-        "source": "User",
-        "relation": "requested_installation_of",
-        "target": "editdistance"
+  "formatted_context": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "pip install editdistance",
+        "message_id": "41389ec1-cc3e-44d5-8008-bfa94abd9954",
+        "relevance_score": 0.652
       },
-      "similarity": 1.0000001,
-      "distance": -1.1920929e-07,
-      "evidence_message_ids": ["41389ec1-cc3e-44d5-8008-bfa94abd9954"]
+      {
+        "role": "user",
+        "content": "It looks like you're trying to import selenium...",
+        "message_id": "...",
+        "relevance_score": 0.421
+      }
+    ],
+    "total_tokens_estimate": 150,
+    "context_window_used": 7.5,
+    "unique_conversations": 2
+  },
+  "knowledge_graph_edges": [
+    {
+      "source": "user",
+      "target": "install_package",
+      "relation": "wants_to",
+      "evidence_message_ids": ["..."],
+      "conversation_id": "..."
     }
   ],
-  "count": 5
+  "query_duration_ms": 127,
+  "total_evidence_messages": 5
+}
+```
+
+### Getting Statistics
+
+```bash
+curl http://localhost:3000/ingest/statistics | jq
+```
+
+**Response:**
+```json
+{
+  "total_conversations": 270,
+  "total_messages": 5741,
+  "total_nodes": 1768,
+  "total_edges": 1561
 }
 ```
 
@@ -518,42 +693,76 @@ let results = query_similar("search query", 5).await?;
 
 ## Database Schema
 
-### AGE Graph Schema
-
-The system creates a graph named `sem_graph` with the following structure:
-
-- **Nodes**: Represent entities (subjects and objects)
-  - Properties: `name`, `type`, custom properties
-- **Edges**: Represent relationships
-  - Label: Relationship type (e.g., "AUTHORED_BY")
-  - Properties: Custom relationship properties
-
-### Vector Storage Tables (ag_catalog schema)
+### Message Storage (ag_catalog schema)
 
 ```sql
--- Embeddings table
+-- Conversations
+CREATE TABLE conversations (
+    conversation_id UUID PRIMARY KEY,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    metadata JSONB DEFAULT '{}'::jsonb
+);
+
+-- Messages
+CREATE TABLE ag_catalog.messages (
+    message_id UUID PRIMARY KEY,
+    conversation_id UUID NOT NULL REFERENCES conversations(conversation_id),
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    metadata JSONB DEFAULT '{}'::jsonb
+);
+
+-- Message embeddings (pgvector)
+CREATE TABLE ag_catalog.message_embeddings (
+    message_id UUID PRIMARY KEY REFERENCES messages(message_id),
+    embedding vector(768) NOT NULL,
+    embedding_model VARCHAR(100) DEFAULT 'nomic-embed-text-v1.5',
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- IVFFlat index for fast similarity search
+CREATE INDEX idx_message_embeddings_ivfflat 
+    ON ag_catalog.message_embeddings
+    USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+```
+
+### Knowledge Graph Storage
+
+```sql
+-- KG Nodes
+CREATE TABLE kg_nodes (
+    node_id VARCHAR(255),
+    conversation_id UUID REFERENCES conversations(conversation_id),
+    node_type VARCHAR(100),
+    created_at TIMESTAMP DEFAULT NOW(),
+    PRIMARY KEY (node_id, conversation_id)
+);
+
+-- KG Edges with evidence tracking
+CREATE TABLE kg_edges (
+    edge_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    conversation_id UUID REFERENCES conversations(conversation_id),
+    source_node VARCHAR(255) NOT NULL,
+    target_node VARCHAR(255) NOT NULL,
+    relation VARCHAR(255) NOT NULL,
+    evidence_message_ids UUID[] NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_kg_edges_evidence ON kg_edges USING GIN(evidence_message_ids);
+```
+
+### Legacy Edge Embeddings (ag_catalog schema)
+
+```sql
+-- LSH-indexed edge embeddings
 CREATE TABLE ag_catalog.embeddings (
     triplet_id BIGINT PRIMARY KEY,
-    vec TEXT,                    -- JSON-serialized 768-dim vector
-    lsh_bucket INTEGER,          -- LSH bucket (0-7 for 8 buckets)
-    session_id TEXT,             -- Session UUID
-    edge_text TEXT               -- Edge text for reference
-);
-
--- Sessions metadata
-CREATE TABLE ag_catalog.sessions (
-    session_id TEXT PRIMARY KEY,
-    ingested_at TIMESTAMP DEFAULT NOW(),
-    node_count INTEGER,
-    edge_count INTEGER
-);
-
--- Edge evidence tracking
-CREATE TABLE ag_catalog.edge_evidence (
-    edge_id BIGINT,
+    vec TEXT,
+    lsh_bucket INTEGER,
     session_id TEXT,
-    evidence_message_id TEXT,
-    PRIMARY KEY (edge_id, evidence_message_id)
+    edge_text TEXT
 );
 ```
 
@@ -665,18 +874,31 @@ cargo check
 
 ## Roadmap
 
+### Completed ✅
 - [x] REST API endpoints for ingestion/retrieval
-- [x] Semantic embeddings with llama.cpp
-- [x] Session-based knowledge graph ingestion
-- [x] Evidence tracking for edges
-- [ ] Support for multiple embedding models
-- [ ] Streaming ingestion API
-- [ ] Distributed LSH for large-scale deployments
-- [ ] Real-time graph updates
-- [ ] Query optimization and caching
-- [ ] Monitoring and metrics dashboard
+- [x] Semantic embeddings with llama.cpp (Nomic Embed v1.5)
+- [x] Message-level RAG with pgvector
+- [x] Conversation-aware knowledge graphs
+- [x] Evidence tracking linking messages to KG edges
+- [x] LLM context generation with relevance scoring
+- [x] Token budget management for context windows
+- [x] IVFFlat indexing for fast similarity search
+
+### In Progress 🚧
+- [ ] Hybrid retrieval (semantic + keyword + graph traversal)
+- [ ] Query result caching
+- [ ] Batch embedding generation optimization
+
+### Future Plans 📋
+- [ ] Support for multiple embedding models (OpenAI, Cohere, etc.)
+- [ ] Streaming ingestion API for real-time updates
+- [ ] Re-ranking with cross-encoders
+- [ ] Conversation summarization
+- [ ] Multi-turn conversation context
+- [ ] Monitoring and metrics dashboard (Prometheus/Grafana)
 - [ ] Docker containerization
 - [ ] Kubernetes deployment manifests
+- [ ] Distributed deployment for large-scale workloads
 
 ## Contributing
 
@@ -696,20 +918,33 @@ cargo check
 ## Key Technologies
 
 - **[Rust](https://www.rust-lang.org/)** - Systems programming language for performance and safety
+- **[PostgreSQL](https://www.postgresql.org/)** - Advanced open-source relational database
+- **[pgvector](https://github.com/pgvector/pgvector)** - Vector similarity search extension for PostgreSQL
 - **[Apache AGE](https://age.apache.org/)** - Graph database extension for PostgreSQL
 - **[llama.cpp](https://github.com/ggerganov/llama.cpp)** - Efficient LLM inference in C++
-- **[Nomic Embed](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF)** - State-of-the-art text embedding model
+- **[Nomic Embed](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF)** - State-of-the-art text embedding model (768-dim)
 - **[Tokio](https://tokio.rs/)** - Async runtime for Rust
 - **[Axum](https://github.com/tokio-rs/axum)** - Web framework for Rust
 - **[tokio-postgres](https://github.com/sfackler/rust-postgres)** - PostgreSQL client for Rust
 
 ## Performance Characteristics
 
-- **Embedding Generation**: ~10-15ms per edge (via llama.cpp HTTP)
-- **Ingestion Throughput**: ~35-40 edges/second (including embedding + DB writes)
-- **Query Latency**: <200ms for similarity search with 66 edges
-- **Accuracy**: 100% similarity match for exact queries, >80% for semantic matches
-- **Memory**: ~2GB for llama.cpp server with Q4_0 model
+### Ingestion
+- **Message Ingestion**: 5,741 messages in 3.5 seconds (~1,640 messages/sec)
+- **Knowledge Graph Ingestion**: 3,329 nodes+edges in 963ms (~3,455 items/sec)
+- **Embedding Storage**: Native pgvector format, no serialization overhead
+- **Memory Usage**: ~2GB for llama.cpp server with Q4_0 model
+
+### Query Performance
+- **Semantic Search**: <200ms for top-10 from 5,741 messages (pgvector cosine similarity)
+- **LLM Context Generation**: ~127ms end-to-end (embedding generation + retrieval + formatting)
+- **Embedding Generation**: ~128ms per query via llama.cpp HTTP
+- **Accuracy**: >60% semantic relevance for related queries, exact matches for direct keywords
+
+### Scalability
+- Tested with **5,741 messages** across **270 conversations**
+- IVFFlat indexing provides sub-linear scaling for large datasets
+- Async Rust architecture handles concurrent requests efficiently
 
 ## Support
 

@@ -19,25 +19,61 @@ pub async fn health_check() -> Result<Json<StatusResponse>, (StatusCode, Json<Er
 }
 
 async fn get_system_status() -> anyhow::Result<StatusResponse> {
-    let client = db::connect::get_client().await?;
+    tracing::info!("🔍 Starting system status check");
+    
+    let client = db::connect::get_client().await.map_err(|e| {
+        tracing::error!("❌ Failed to get database client: {}", e);
+        e
+    })?;
+    
+    tracing::info!("✅ Database client connected");
     
     // Get session count (explicitly use ag_catalog schema)
-    let session_count = client
+    let session_count = match client
         .query_one("SELECT COUNT(*) FROM ag_catalog.sessions", &[])
-        .await?
-        .get::<_, i64>(0);
+        .await {
+            Ok(row) => {
+                let count = row.get::<_, i64>(0);
+                tracing::info!("✅ Session count: {}", count);
+                count
+            },
+            Err(e) => {
+                tracing::warn!("⚠️  Failed to get session count: {}", e);
+                0
+            }
+        };
     
-    // Get total nodes (approximate from AGE)
-    let node_count_result = client
-        .query("SELECT COUNT(*) FROM ag_catalog.ag_label WHERE graph = (SELECT graphid FROM ag_catalog.ag_graph WHERE name = 'sem_graph')", &[])
-        .await;
-    let node_count = node_count_result.map(|rows| rows.len() as i64).unwrap_or(0);
+    // Get knowledge graph nodes count
+    let node_count = match client
+        .query_one("SELECT COUNT(*) FROM kg_nodes", &[])
+        .await {
+            Ok(row) => {
+                let count = row.get::<_, i64>(0);
+                tracing::info!("✅ KG nodes count: {}", count);
+                count
+            },
+            Err(e) => {
+                tracing::warn!("⚠️  Failed to get KG nodes count: {}", e);
+                0
+            }
+        };
     
-    // Get total embeddings (explicitly use ag_catalog schema)
-    let edge_count = client
-        .query_one("SELECT COUNT(*) FROM ag_catalog.embeddings", &[])
-        .await?
-        .get::<_, i64>(0);
+    // Get knowledge graph edges count
+    let edge_count = match client
+        .query_one("SELECT COUNT(*) FROM kg_edges", &[])
+        .await {
+            Ok(row) => {
+                let count = row.get::<_, i64>(0);
+                tracing::info!("✅ KG edges count: {}", count);
+                count
+            },
+            Err(e) => {
+                tracing::warn!("⚠️  Failed to get KG edges count: {}", e);
+                0
+            }
+        };
+    
+    tracing::info!("✅ System status check completed");
     
     Ok(StatusResponse {
         status: "healthy".to_string(),
