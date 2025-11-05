@@ -62,39 +62,51 @@ pub async fn query_llm_context(
 
     println!("Generated query embedding with {} dimensions", query_embedding.len());
 
-    // Step 2: Perform semantic similarity search on message embeddings
-    let similar_messages = match get_similar_messages_by_embedding(&client, &query_embedding, top_k as i64 * 2).await {
-        Ok(msgs) => msgs,
+    // Step 2: Search KG edges by semantic similarity (THIS IS THE KEY CHANGE!)
+    let similar_edges = match get_similar_edges_by_embedding(&client, &query_embedding, top_k as i64).await {
+        Ok(edges) => edges,
         Err(e) => {
-            eprintln!("Error querying similar messages: {}", e);
+            eprintln!("Error querying similar edges: {}", e);
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
 
-    println!("Found {} similar messages via embedding search", similar_messages.len());
+    println!("Found {} similar edges via embedding search", similar_edges.len());
 
-    // Step 3: Extract keywords for KG search (parallel with semantic search)
-    let keywords: Vec<String> = payload.query
-        .split_whitespace()
-        .filter(|s| s.len() > 2)
-        .map(|s| s.to_lowercase())
-        .collect();
+    // Step 3: Extract all evidence_message_ids from the matched edges
+    let mut evidence_message_ids = HashSet::new();
+    let mut kg_edges_for_response = Vec::new();
+    
+    for (edge, similarity) in similar_edges {
+        println!("Edge: {} {} {} (similarity: {:.3})", 
+            edge.source, edge.relation, edge.target, similarity);
+        
+        // Collect all evidence message IDs
+        for msg_id in &edge.evidence_message_ids {
+            evidence_message_ids.insert(*msg_id);
+        }
+        
+        kg_edges_for_response.push(edge);
+    }
 
-    // Step 4: Query knowledge graph for relevant edges (for additional context)
-    let kg_edges = match get_edges_by_query(&client, &keywords, top_k as i64).await {
-        Ok(edges) => edges,
+    println!("Collected {} unique evidence message IDs from edges", evidence_message_ids.len());
+
+    // Step 4: Fetch the actual messages using the evidence_message_ids
+    let evidence_message_vec: Vec<Uuid> = evidence_message_ids.into_iter().collect();
+    let messages = match get_messages_by_ids_ordered(&client, &evidence_message_vec).await {
+        Ok(msgs) => msgs,
         Err(e) => {
-            eprintln!("Error querying knowledge graph: {}", e);
-            Vec::new() // Don't fail, just return empty
+            eprintln!("Error fetching messages: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
 
-    println!("Found {} relevant KG edges", kg_edges.len());
+    println!("Retrieved {} messages from evidence IDs", messages.len());
 
-    let total_evidence_messages = similar_messages.len();
+    let total_evidence_messages = messages.len();
 
-    // Step 5: Format for LLM context with token estimation and actual relevance scores
-    let formatted = format_messages_with_scores(similar_messages, max_tokens);
+    // Step 5: Format messages for LLM context with token management
+    let formatted = format_messages_for_llm_simple(messages, max_tokens);
 
     println!("Formatted {} messages for LLM (estimated {} tokens, {:.1}% of context window)",
         formatted.messages.len(),
@@ -103,7 +115,7 @@ pub async fn query_llm_context(
 
     let response = ContextQueryResponse {
         formatted_context: formatted,
-        knowledge_graph_edges: if include_kg_edges { kg_edges } else { Vec::new() },
+        knowledge_graph_edges: if include_kg_edges { kg_edges_for_response } else { Vec::new() },
         query_duration_ms: start.elapsed().as_millis(),
         total_evidence_messages,
     };
@@ -194,6 +206,51 @@ fn format_messages_for_llm(
             content,
             message_id: msg.message_id,
             relevance_score,
+        });
+
+        total_tokens += estimated_tokens;
+    }
+
+    FormattedLLMContext {
+        messages: llm_messages,
+        total_tokens_estimate: total_tokens,
+        context_window_used: (total_tokens as f32 / max_tokens as f32) * 100.0,
+        unique_conversations: conversations.len(),
+    }
+}
+
+/// Format messages for LLM (simple version without relevance scores)
+/// Used when messages come from evidence_message_ids (already relevant by definition)
+fn format_messages_for_llm_simple(
+    messages: Vec<Message>,
+    max_tokens: usize,
+) -> FormattedLLMContext {
+    let mut llm_messages = Vec::new();
+    let mut total_tokens = 0;
+    let tokens_per_char = 0.25; // rough estimate: 1 token ≈ 4 chars
+
+    // Track unique conversations
+    let mut conversations = HashSet::new();
+
+    for msg in messages.iter() {
+        let estimated_tokens = (msg.content.len() as f32 * tokens_per_char) as usize;
+
+        // Stop if we exceed token budget
+        if total_tokens + estimated_tokens > max_tokens {
+            println!("Reached token limit, stopping at {} messages", llm_messages.len());
+            break;
+        }
+
+        conversations.insert(msg.conversation_id);
+
+        // Parse role from message content if possible
+        let (role, content) = parse_message_role(&msg.content);
+
+        llm_messages.push(LLMContextMessage {
+            role,
+            content,
+            message_id: msg.message_id,
+            relevance_score: 1.0, // All evidence messages are equally relevant
         });
 
         total_tokens += estimated_tokens;

@@ -1,5 +1,6 @@
 use tokio_postgres::{Client, Error};
 use uuid::Uuid;
+use pgvector::Vector;
 use crate::db::models::*;
 use crate::db::message_ops::insert_conversation;
 
@@ -20,14 +21,16 @@ pub async fn insert_kg_node(
 }
 
 /// Insert a knowledge graph edge with evidence
+/// Returns the edge_id of the inserted edge
 pub async fn insert_kg_edge(
     client: &Client,
     conversation_id: Uuid,
     edge: &KGEdge,
-) -> Result<(), Error> {
-    client.execute(
+) -> Result<Uuid, Error> {
+    let row = client.query_one(
         "INSERT INTO kg_edges (conversation_id, source_node, target_node, relation, evidence_message_ids)
-         VALUES ($1, $2, $3, $4, $5)",
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING edge_id",
         &[
             &conversation_id,
             &edge.source,
@@ -36,7 +39,9 @@ pub async fn insert_kg_edge(
             &edge.evidence_message_ids,
         ],
     ).await?;
-    Ok(())
+    
+    let edge_id: Uuid = row.get(0);
+    Ok(edge_id)
 }
 
 /// Batch insert knowledge graph data for multiple conversations
@@ -67,10 +72,35 @@ pub async fn batch_insert_knowledge_graph(
             }
         }
 
-        // Insert edges
+        // Insert edges and generate embeddings
         for edge in &kg.edges {
             match insert_kg_edge(client, conversation_id, edge).await {
-                Ok(_) => total_edges += 1,
+                Ok(edge_id) => {
+                    total_edges += 1;
+                    
+                    // Generate edge text for embedding: "source relation target"
+                    let edge_text = format!("{} {} {}", edge.source, edge.relation, edge.target);
+                    
+                    // Generate embedding using llama.cpp
+                    use crate::etl::embed;
+                    match embed::embed_text(&edge_text).await {
+                        Ok(embedding) => {
+                            // Insert the edge embedding
+                            if let Err(e) = insert_kg_edge_embedding(client, edge_id, &embedding, &edge_text).await {
+                                errors.push(format!("Embedding for edge {}->{}: {}", 
+                                    edge.source, edge.target, e));
+                                eprintln!("Failed to insert embedding for edge {}->{}: {}",
+                                    edge.source, edge.target, e);
+                            }
+                        }
+                        Err(e) => {
+                            errors.push(format!("Failed to generate embedding for edge {}->{}: {}",
+                                edge.source, edge.target, e));
+                            eprintln!("Failed to generate embedding for edge {}->{}: {}",
+                                edge.source, edge.target, e);
+                        }
+                    }
+                }
                 Err(e) => {
                     errors.push(format!("Edge {}->{} in conv {}: {}",
                         edge.source, edge.target, conversation_id, e));
@@ -175,5 +205,64 @@ pub async fn get_kg_statistics(client: &Client) -> Result<serde_json::Value, Err
         "total_conversations": conversation_count,
         "total_messages": message_count,
     }))
+}
+
+/// Insert an embedding for a knowledge graph edge
+pub async fn insert_kg_edge_embedding(
+    client: &Client,
+    edge_id: Uuid,
+    embedding: &[f32],
+    edge_text: &str,
+) -> Result<(), Error> {
+    let embedding_vec = Vector::from(embedding.to_vec());
+    
+    client.execute(
+        "INSERT INTO ag_catalog.kg_edge_embeddings (edge_id, embedding, edge_text)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (edge_id) DO UPDATE 
+         SET embedding = EXCLUDED.embedding, edge_text = EXCLUDED.edge_text",
+        &[&edge_id, &embedding_vec, &edge_text],
+    ).await?;
+    
+    Ok(())
+}
+
+/// Get similar edges by embedding similarity (for RAG retrieval)
+/// Returns edges with their evidence_message_ids
+pub async fn get_similar_edges_by_embedding(
+    client: &Client,
+    query_embedding: &[f32],
+    limit: i64,
+) -> Result<Vec<(KGEdgeWithContext, f32)>, Error> {
+    let embedding_vec = Vector::from(query_embedding.to_vec());
+    
+    eprintln!("DEBUG: Searching for similar edges with embedding dim={}, limit={}", 
+        query_embedding.len(), limit);
+
+    let rows = client.query(
+        "SELECT e.edge_id, e.conversation_id, e.source_node, e.target_node, e.relation, 
+                e.evidence_message_ids, 1 - (ee.embedding <=> $1) as similarity
+         FROM ag_catalog.kg_edges e
+         JOIN ag_catalog.kg_edge_embeddings ee ON e.edge_id = ee.edge_id
+         ORDER BY ee.embedding <=> $1
+         LIMIT $2",
+        &[&embedding_vec, &limit],
+    ).await?;
+    
+    eprintln!("DEBUG: Query returned {} rows", rows.len());
+
+    let edges = rows.iter().map(|row| {
+        let similarity: f64 = row.get(6);
+        let edge = KGEdgeWithContext {
+            conversation_id: row.get(1),
+            source: row.get(2),
+            target: row.get(3),
+            relation: row.get(4),
+            evidence_message_ids: row.get(5),
+        };
+        (edge, similarity as f32)
+    }).collect();
+
+    Ok(edges)
 }
 

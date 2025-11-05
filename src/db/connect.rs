@@ -155,11 +155,24 @@ async fn run_message_schema_migration(client: &Client) -> Result<()> {
         );"
     ).await?;
 
+    // Knowledge graph edge embeddings (for semantic search on edges)
+    client.batch_execute(
+        "CREATE TABLE IF NOT EXISTS kg_edge_embeddings (
+            edge_id UUID PRIMARY KEY REFERENCES kg_edges(edge_id) ON DELETE CASCADE,
+            embedding vector(768) NOT NULL,
+            edge_text TEXT NOT NULL,
+            embedding_model VARCHAR(100) DEFAULT 'nomic-embed-text-v1.5',
+            created_at TIMESTAMP DEFAULT NOW()
+        );"
+    ).await?;
+
     // Create indexes
     client.batch_execute(
         "CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
          CREATE INDEX IF NOT EXISTS idx_message_embeddings_ivfflat ON message_embeddings
              USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+         CREATE INDEX IF NOT EXISTS idx_kg_edge_embeddings_ivfflat ON kg_edge_embeddings
+             USING ivfflat (embedding vector_cosine_ops) WITH (lists = 50);
          CREATE INDEX IF NOT EXISTS idx_kg_edges_conversation ON kg_edges(conversation_id);
          CREATE INDEX IF NOT EXISTS idx_kg_edges_evidence ON kg_edges USING GIN(evidence_message_ids);
          CREATE INDEX IF NOT EXISTS idx_kg_nodes_conversation ON kg_nodes(conversation_id);
