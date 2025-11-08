@@ -1,67 +1,118 @@
 # RustIngester - Docker Quick Start
 
-Get RustIngester running in **under 2 minutes** with Docker!
+Get RustIngester running in **under 5 minutes** with Docker! Includes PostgreSQL with **Apache AGE** and **pgvector**.
 
 ## Prerequisites
 
 - Docker Desktop (Mac/Windows) or Docker Engine (Linux)
 - 4GB RAM minimum
-- 5GB disk space
+- 10GB disk space (includes PostgreSQL build with AGE)
+- `curl` and `jq` for testing
 
 ## Quick Start
 
-### 1. Start Everything
+### 1. Download the Embedding Model
 
 ```bash
-# Download model (one-time, ~74MB)
+# Download Nomic Embed model (one-time, ~74MB)
 ./download-model.sh
-
-# Start all services
-docker compose up -d
 ```
 
-That's it! The service will be available at `http://localhost:3000`
-
-### 2. Verify It's Running
+### 2. Build and Start All Services
 
 ```bash
+# Build custom PostgreSQL image with AGE (first time: ~5 minutes)
+# Subsequent starts: ~10 seconds
+docker compose up -d --build
+```
+
+**What's happening:**
+- Building PostgreSQL 14 with pgvector 0.8.0 and Apache AGE 1.5.0
+- Starting llama.cpp embedding server
+- Starting RustIngester API service
+
+### 3. Wait for Services to be Ready
+
+```bash
+# Wait for all services to be healthy (~30 seconds)
+echo "Waiting for services..."
+sleep 30
+
 # Check status
 curl http://localhost:3000/status | jq .
-
-# Expected output:
-# {
-#   "status": "healthy",
-#   "database": "connected",
-#   "age_extension": "loaded",
-#   "total_nodes": 0,
-#   "total_edges": 0
-# }
 ```
 
-### 3. Ingest Your Data
+**Expected output:**
+```json
+{
+  "status": "healthy",
+  "database": "connected",
+  "age_extension": "loaded",
+  "graph_name": "sem_graph",
+  "total_nodes": 0,
+  "total_edges": 0
+}
+```
+
+That's it! The service is now running at `http://localhost:3000`
+
+### 4. Test Hybrid Retrieval (Optional - if you have data)
+
+If you have the sample data files, you can test the full system:
+
+#### Ingest Messages
 
 ```bash
-# Ingest messages with embeddings (if you have data)
+# Ingest messages with embeddings
 curl -X POST http://localhost:3000/ingest/messages \
   -H "Content-Type: application/json" \
-  -d @Data/turn_embeddings.json
+  -d @Data/turn_embeddings.json | jq .
 
-# Ingest knowledge graph (if you have data)
-curl -X POST http://localhost:3000/ingest/knowledge-graph \
-  -H "Content-Type: application/json" \
-  -d @Data/enhanced_pipeline_full_results.json
+# Expected: {"success": true, "total_processed": 5741, ...}
 ```
 
-### 4. Query with Semantic Search
+#### Ingest Knowledge Graph
 
 ```bash
-curl -X POST http://localhost:3000/query/llm-context \
+# Ingest KG edges (takes ~25 seconds for embedding generation)
+curl -X POST http://localhost:3000/ingest/knowledge-graph \
+  -H "Content-Type: application/json" \
+  -d @Data/enhanced_pipeline_full_results.json | jq .
+
+# Expected: {"success": true, "total_processed": 3329, ...}
+```
+
+#### Test Hybrid Retrieval
+
+```bash
+# Test BM25 keyword search (direct_only mode)
+curl -s -X POST http://localhost:3000/query/llm-context \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "How do I install a Python package?",
+    "query": "Zapier",
     "top_k": 5,
-    "max_tokens": 2000
-  }' | jq .
+    "retrieval_mode": "direct_only"
+  }' | jq '{
+    stats: .retrieval_stats,
+    first_message: .formatted_context.messages[0].content[:100]
+  }'
+
+# Expected: 5 messages about Zapier with 100% keyword coverage
+```
+
+#### Test Query Expansion
+
+```bash
+# Test with technical term
+curl -s -X POST http://localhost:3000/query/llm-context \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "install package",
+    "top_k": 5,
+    "retrieval_mode": "direct_only"
+  }' | jq '.retrieval_stats'
+
+# Query expands "install" → ["install", "setup", "pip", "npm", ...]
 ```
 
 ## Common Commands

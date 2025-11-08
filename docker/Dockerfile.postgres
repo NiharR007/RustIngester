@@ -1,0 +1,41 @@
+# PostgreSQL with pgvector and Apache AGE
+# Start with pgvector image (already has pgvector installed)
+FROM pgvector/pgvector:pg14
+
+# Install build dependencies for Apache AGE
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    postgresql-server-dev-14 \
+    libreadline-dev \
+    zlib1g-dev \
+    flex \
+    bison \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Apache AGE
+RUN cd /tmp && \
+    git clone https://github.com/apache/age.git && \
+    cd age && \
+    git checkout release/PG14/1.5.0 && \
+    make PG_CONFIG=/usr/bin/pg_config && \
+    make install PG_CONFIG=/usr/bin/pg_config && \
+    cd / && \
+    rm -rf /tmp/age
+
+# Clean up build dependencies to reduce image size
+RUN apt-get purge -y --auto-remove \
+    build-essential \
+    git \
+    postgresql-server-dev-14 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Add AGE to shared_preload_libraries
+RUN echo "shared_preload_libraries = 'age'" >> /usr/share/postgresql/postgresql.conf.sample
+
+# Expose PostgreSQL port
+EXPOSE 5432
+
+# Use the default postgres entrypoint
+CMD ["postgres"]

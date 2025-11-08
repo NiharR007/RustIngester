@@ -110,15 +110,37 @@ async fn run_message_schema_migration(client: &Client) -> Result<()> {
         );"
     ).await?;
 
-    // Messages table
+    // Messages table with full-text search support
     client.batch_execute(
         "CREATE TABLE IF NOT EXISTS messages (
             message_id UUID PRIMARY KEY,
             conversation_id UUID NOT NULL REFERENCES conversations(conversation_id) ON DELETE CASCADE,
             content TEXT NOT NULL,
+            content_tsv tsvector, -- Full-text search vector
             created_at TIMESTAMP DEFAULT NOW(),
             metadata JSONB DEFAULT '{}'::jsonb
         );"
+    ).await?;
+    
+    // Create GIN index for full-text search (BM25-style ranking)
+    client.execute(
+        "CREATE INDEX IF NOT EXISTS idx_messages_content_tsv 
+         ON messages USING GIN(content_tsv);",
+        &[]
+    ).await?;
+    
+    // Create trigger to auto-update tsvector on insert/update
+    client.batch_execute(
+        "CREATE OR REPLACE FUNCTION messages_tsv_trigger() RETURNS trigger AS $$
+         BEGIN
+           NEW.content_tsv := to_tsvector('english', NEW.content);
+           RETURN NEW;
+         END
+         $$ LANGUAGE plpgsql;
+         
+         DROP TRIGGER IF EXISTS tsvectorupdate ON messages;
+         CREATE TRIGGER tsvectorupdate BEFORE INSERT OR UPDATE
+         ON messages FOR EACH ROW EXECUTE FUNCTION messages_tsv_trigger();"
     ).await?;
 
     // Message embeddings with pgvector

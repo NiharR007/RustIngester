@@ -14,6 +14,7 @@ pub struct ContextQueryRequest {
     pub top_k: Option<usize>,
     pub max_tokens: Option<usize>, // e.g., 4000 for context window
     pub include_kg_edges: Option<bool>,
+    pub retrieval_mode: Option<String>, // "hybrid" (default), "kg_only", "direct_only"
 }
 
 #[derive(Debug, Serialize)]
@@ -22,6 +23,15 @@ pub struct ContextQueryResponse {
     pub knowledge_graph_edges: Vec<KGEdgeWithContext>,
     pub query_duration_ms: u128,
     pub total_evidence_messages: usize,
+    pub retrieval_stats: RetrievalStats,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RetrievalStats {
+    pub kg_edge_matches: usize,
+    pub direct_message_matches: usize,
+    pub total_unique_messages: usize,
+    pub retrieval_mode: String,
 }
 
 // ============================================================================
@@ -37,7 +47,10 @@ pub async fn query_llm_context(
 
     let top_k = payload.top_k.unwrap_or(10);
     let max_tokens = payload.max_tokens.unwrap_or(4000);
-    let include_kg_edges = payload.include_kg_edges.unwrap_or(true);
+    let include_kg_edges = payload.include_kg_edges.unwrap_or(false);
+    let retrieval_mode = payload.retrieval_mode.as_deref().unwrap_or("hybrid");
+
+    println!("Retrieval mode: {}", retrieval_mode);
 
     println!("Querying LLM context for: '{}' (top_k={}, max_tokens={})",
         payload.query, top_k, max_tokens);
@@ -62,36 +75,92 @@ pub async fn query_llm_context(
 
     println!("Generated query embedding with {} dimensions", query_embedding.len());
 
-    // Step 2: Search KG edges by semantic similarity (THIS IS THE KEY CHANGE!)
-    let similar_edges = match get_similar_edges_by_embedding(&client, &query_embedding, top_k as i64).await {
-        Ok(edges) => edges,
-        Err(e) => {
-            eprintln!("Error querying similar edges: {}", e);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        }
-    };
-
-    println!("Found {} similar edges via embedding search", similar_edges.len());
-
-    // Step 3: Extract all evidence_message_ids from the matched edges
+    // Step 2A: Search KG edges with graph traversal (if enabled)
+    let mut kg_edge_count = 0;
     let mut evidence_message_ids = HashSet::new();
     let mut kg_edges_for_response = Vec::new();
-    
-    for (edge, similarity) in similar_edges {
-        println!("Edge: {} {} {} (similarity: {:.3})", 
-            edge.source, edge.relation, edge.target, similarity);
-        
-        // Collect all evidence message IDs
-        for msg_id in &edge.evidence_message_ids {
-            evidence_message_ids.insert(*msg_id);
+
+    if retrieval_mode == "hybrid" || retrieval_mode == "kg_only" {
+        // Use hybrid KG retrieval with graph traversal
+        let enable_traversal = true; // Enable multi-hop traversal
+        let kg_edges = match hybrid_kg_retrieval(&client, &query_embedding, top_k as i64, enable_traversal).await {
+            Ok(edges) => edges,
+            Err(e) => {
+                eprintln!("Error in hybrid KG retrieval: {}", e);
+                if retrieval_mode == "kg_only" {
+                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                }
+                Vec::new() // Continue with direct search in hybrid mode
+            }
+        };
+
+        kg_edge_count = kg_edges.len();
+        println!("Found {} edges via KG search + graph traversal", kg_edge_count);
+
+        // Extract evidence_message_ids from matched edges with relevance filtering
+        for edge in kg_edges {
+            println!("  KG Edge: {} {} {}", 
+                edge.source, edge.relation, edge.target);
+            
+            // Check if edge is relevant to query keywords
+            let edge_text = format!("{} {} {}", edge.source, edge.relation, edge.target).to_lowercase();
+            let query_lower = payload.query.to_lowercase();
+            
+            // Simple relevance check: edge contains at least one query word (>3 chars)
+            let query_words: Vec<&str> = query_lower.split_whitespace()
+                .filter(|w| w.len() > 3)
+                .collect();
+            
+            let is_relevant = query_words.iter().any(|word| edge_text.contains(word));
+            
+            if is_relevant || retrieval_mode == "kg_only" {
+                for msg_id in &edge.evidence_message_ids {
+                    evidence_message_ids.insert(*msg_id);
+                }
+                kg_edges_for_response.push(edge);
+            } else {
+                println!("    ⚠️  Filtered out (not relevant to query)");
+            }
         }
-        
-        kg_edges_for_response.push(edge);
+
+        println!("Collected {} unique message IDs from KG (with traversal)", evidence_message_ids.len());
     }
 
-    println!("Collected {} unique evidence message IDs from edges", evidence_message_ids.len());
+    // Step 2B: HYBRID/DIRECT - Search messages with keyword + embedding hybrid
+    let mut direct_message_count = 0;
+    if retrieval_mode == "hybrid" || retrieval_mode == "direct_only" {
+        println!("Using hybrid keyword + embedding search for direct messages");
+        
+        let similar_messages = match hybrid_search_messages(&client, &payload.query, &query_embedding, top_k as i64).await {
+            Ok(msgs) => msgs,
+            Err(e) => {
+                eprintln!("Error in hybrid message search: {}", e);
+                if retrieval_mode == "direct_only" {
+                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                }
+                Vec::new() // Continue with KG results in hybrid mode
+            }
+        };
 
-    // Step 4: Fetch the actual messages using the evidence_message_ids
+        direct_message_count = similar_messages.len();
+        println!("Found {} messages via hybrid search (keyword + embedding)", direct_message_count);
+
+        // Add directly matched messages to the evidence set
+        for msg_with_rel in &similar_messages {
+            let preview = if msg_with_rel.content.len() > 60 {
+                &msg_with_rel.content[..60]
+            } else {
+                &msg_with_rel.content
+            };
+            println!("  Match: {}... (score: {:.3})", 
+                preview, msg_with_rel.relevance_score);
+            evidence_message_ids.insert(msg_with_rel.message_id);
+        }
+
+        println!("Total unique message IDs after hybrid search: {}", evidence_message_ids.len());
+    }
+
+    // Step 3: Fetch the actual messages using the combined evidence_message_ids
     let evidence_message_vec: Vec<Uuid> = evidence_message_ids.into_iter().collect();
     let messages = match get_messages_by_ids_ordered(&client, &evidence_message_vec).await {
         Ok(msgs) => msgs,
@@ -101,11 +170,12 @@ pub async fn query_llm_context(
         }
     };
 
-    println!("Retrieved {} messages from evidence IDs", messages.len());
+    println!("Retrieved {} messages (KG: {}, Direct: {}, Mode: {})", 
+        messages.len(), kg_edge_count, direct_message_count, retrieval_mode);
 
     let total_evidence_messages = messages.len();
 
-    // Step 5: Format messages for LLM context with token management
+    // Step 4: Format messages for LLM context with token management
     let formatted = format_messages_for_llm_simple(messages, max_tokens);
 
     println!("Formatted {} messages for LLM (estimated {} tokens, {:.1}% of context window)",
@@ -118,6 +188,12 @@ pub async fn query_llm_context(
         knowledge_graph_edges: if include_kg_edges { kg_edges_for_response } else { Vec::new() },
         query_duration_ms: start.elapsed().as_millis(),
         total_evidence_messages,
+        retrieval_stats: RetrievalStats {
+            kg_edge_matches: kg_edge_count,
+            direct_message_matches: direct_message_count,
+            total_unique_messages: total_evidence_messages,
+            retrieval_mode: retrieval_mode.to_string(),
+        },
     };
 
     Ok(Json(response))

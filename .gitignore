@@ -7,4 +7,4 @@
 /Data
 # Docker
 docker/postgres-data/
-
+.cleanup_old_files.sh

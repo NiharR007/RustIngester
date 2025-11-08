@@ -266,3 +266,86 @@ pub async fn get_similar_edges_by_embedding(
     Ok(edges)
 }
 
+/// Graph traversal: Find related edges via multi-hop traversal
+/// This expands the context by following graph relationships
+pub async fn traverse_graph_from_edges(
+    client: &Client,
+    seed_edges: &[(KGEdgeWithContext, f32)],
+    max_hops: i32,
+) -> Result<Vec<KGEdgeWithContext>, Error> {
+    if seed_edges.is_empty() {
+        return Ok(Vec::new());
+    }
+    
+    // Collect seed nodes (both source and target from matched edges)
+    let mut seed_nodes: Vec<String> = seed_edges.iter()
+        .flat_map(|(edge, _)| vec![edge.source.clone(), edge.target.clone()])
+        .collect();
+    seed_nodes.sort();
+    seed_nodes.dedup();
+    
+    println!("  Graph traversal from {} seed nodes, max {} hops", seed_nodes.len(), max_hops);
+    
+    // Multi-hop traversal query
+    let rows = client.query(
+        "WITH RECURSIVE graph_traverse AS (
+            -- Base case: seed edges
+            SELECT DISTINCT e.edge_id, e.conversation_id, e.source_node, e.target_node, 
+                   e.relation, e.evidence_message_ids, 0 as hop
+            FROM ag_catalog.kg_edges e
+            WHERE e.source_node = ANY($1) OR e.target_node = ANY($1)
+            
+            UNION
+            
+            -- Recursive case: follow edges
+            SELECT DISTINCT e.edge_id, e.conversation_id, e.source_node, e.target_node,
+                   e.relation, e.evidence_message_ids, gt.hop + 1
+            FROM ag_catalog.kg_edges e
+            JOIN graph_traverse gt ON (e.source_node = gt.target_node OR e.target_node = gt.source_node)
+            WHERE gt.hop < $2
+        )
+        SELECT DISTINCT edge_id, conversation_id, source_node, target_node, relation, evidence_message_ids
+        FROM graph_traverse
+        LIMIT 50",
+        &[&seed_nodes, &max_hops],
+    ).await?;
+    
+    let expanded_edges: Vec<KGEdgeWithContext> = rows.iter().map(|row| KGEdgeWithContext {
+        conversation_id: row.get(1),
+        source: row.get(2),
+        target: row.get(3),
+        relation: row.get(4),
+        evidence_message_ids: row.get(5),
+    }).collect();
+    
+    println!("  Graph traversal found {} related edges", expanded_edges.len());
+    
+    Ok(expanded_edges)
+}
+
+/// Hybrid KG retrieval: Embedding search + Graph traversal
+pub async fn hybrid_kg_retrieval(
+    client: &Client,
+    query_embedding: &[f32],
+    top_k: i64,
+    enable_traversal: bool,
+) -> Result<Vec<KGEdgeWithContext>, Error> {
+    // Step 1: Find seed edges via embedding similarity
+    let seed_edges = get_similar_edges_by_embedding(client, query_embedding, top_k).await?;
+    
+    if !enable_traversal || seed_edges.is_empty() {
+        return Ok(seed_edges.into_iter().map(|(edge, _)| edge).collect());
+    }
+    
+    // Step 2: Expand via graph traversal (1-2 hops)
+    let expanded_edges = traverse_graph_from_edges(client, &seed_edges, 2).await?;
+    
+    // Step 3: Combine seed + expanded (dedup by edge_id happens in caller)
+    let mut all_edges: Vec<KGEdgeWithContext> = seed_edges.into_iter()
+        .map(|(edge, _)| edge)
+        .collect();
+    all_edges.extend(expanded_edges);
+    
+    Ok(all_edges)
+}
+

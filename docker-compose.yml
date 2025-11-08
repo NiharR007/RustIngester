@@ -1,9 +1,9 @@
-version: '3.8'
-
 services:
   # PostgreSQL with pgvector and Apache AGE
   postgres:
-    image: ankane/pgvector:latest
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.postgres
     container_name: rustingester-postgres
     environment:
       POSTGRES_USER: postgres
