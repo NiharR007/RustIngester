@@ -260,15 +260,34 @@ pub async fn hybrid_search_messages(
 ) -> Result<Vec<MessageWithRelevance>, Error> {
     let mut message_ids = HashSet::new();
     let mut results = Vec::new();
-    
+
     // Strategy 1: Extract meaningful keywords from query
     // Filter out common stop words and keep only significant terms
-    let stop_words = ["the", "and", "for", "with", "from", "this", "that", "what", "how"];
+    let stop_words = [
+        // Common English stop words
+        "the", "and", "for", "with", "from", "this", "that", "what", "how",
+        "are", "was", "were", "been", "being", "have", "has", "had", "does",
+        "did", "will", "would", "could", "should", "may", "might", "must",
+        "can", "about", "into", "through", "during", "before", "after",
+        "above", "below", "between", "under", "again", "further", "then",
+        "once", "here", "there", "when", "where", "why", "all", "any",
+        "both", "each", "few", "more", "most", "other", "some", "such",
+        "only", "own", "same", "than", "too", "very", "just", "but",
+        // Conversational filler words
+        "hey", "hello", "hi", "please", "thanks", "thank", "you", "your",
+        "want", "need", "help", "tell", "show", "give", "get", "make",
+        "called", "named", "like", "know", "think", "see", "look",
+        // Question words
+        "who", "whom", "which", "whose",
+        // Common verbs that add little meaning
+        "doing", "done", "going", "gone", "come", "came",
+    ];
     let keywords: Vec<String> = query
         .split_whitespace()
         .filter(|w| w.len() > 2) // Skip very short words
         .filter(|w| !stop_words.contains(&w.to_lowercase().as_str())) // Skip stop words
-        .map(|w| w.to_string())
+        .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()).to_string()) // Remove punctuation
+        .filter(|w| !w.is_empty()) // Remove empty strings after trimming
         .collect();
     
     println!("  Extracted keywords: {:?}", keywords);
@@ -324,8 +343,11 @@ pub async fn hybrid_search_messages(
                     
                     // STRICT: Must contain the longest (most specific) keyword
                     // OR have decent BM25 score (>0.01) with good coverage (>50%)
-                    // OR have very high coverage (>60%) regardless of score
-                    if has_longest_keyword || (msg.relevance_score > 0.01 && coverage >= 0.5) || coverage >= 0.6 {
+                    // BUT: If longest keyword is very specific (>8 chars), it MUST be present
+                    let longest_keyword_len = longest_keyword.as_ref().map(|k| k.len()).unwrap_or(0);
+                    let require_longest = longest_keyword_len > 8; // Specific terms like "editdistance" (13 chars)
+                    
+                    if has_longest_keyword || (!require_longest && (msg.relevance_score > 0.01 && coverage >= 0.5)) {
                         let mut boosted_msg = msg;
                         // Boost based on coverage: 20% = 1.5x, 100% = 3.0x
                         // Higher boost for better coverage: 40% = 2.0x, 100% = 4.0x
